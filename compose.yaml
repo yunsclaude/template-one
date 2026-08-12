@@ -1,0 +1,35 @@
+# 로컬에서 운영과 같은 방식(Docker)으로 실행해 보기 위한 설정입니다.
+#
+#   실행: docker compose up -d --build
+#   종료: docker compose down
+#   로그: docker compose logs -f app
+#
+# 실제 API 키나 비밀번호를 이 파일에 절대 적지 마세요.
+# 비밀값이 필요해지면 로컬에서는 .env.local, 배포에서는 서버 환경변수로 주입합니다.
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    # 왼쪽이 내 PC 포트, 오른쪽이 컨테이너 포트입니다.
+    # 오른쪽 3000 은 project.json 의 port 값과 같아야 합니다.
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+    restart: unless-stopped
+    healthcheck:
+      # 배포 서버와 같은 방식으로 /api/health 를 호출해 정상 여부를 확인합니다.
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
