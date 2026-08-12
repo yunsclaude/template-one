@@ -1,0 +1,40 @@
+# 운영(EC2) 전용 덮어쓰기 파일입니다. 로컬에서는 쓰지 않습니다.
+#
+# 로컬은 지금까지처럼 그대로 쓰세요:
+#   docker compose up -d --build              -> http://localhost:3000
+#
+# 운영에서는 GitHub Actions 가 아래처럼 두 파일을 겹쳐서 실행합니다:
+#   docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+#
+# 이 파일은 배포 자동화가 의존하므로 직접 수정하지 마세요.
+# 프로젝트 주소는 project.json 의 id 로 정해집니다. id 를 바꾸면 주소가 따라 바뀝니다.
+#   <project.json 의 id>.<BASE_DOMAIN>   예) lunch-roulette.ai.example.com
+
+services:
+  app:
+    # 로컬용 3000 번 게시를 취소합니다.
+    # 외부에 노출되는 것은 Traefik 의 80/443 뿐이고, 앱은 web 네트워크 안에서만 접근됩니다.
+    # 그래서 여러 프로젝트가 모두 컨테이너 3000 번을 써도 서로 충돌하지 않습니다.
+    ports: !reset []
+
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+
+    # Traefik 은 exposedbydefault=false 이므로, 아래 라벨이 붙은 컨테이너만 외부에 노출됩니다.
+    labels:
+      - "traefik.enable=true"
+      - "traefik.docker.network=web"
+      - "traefik.http.routers.${PROJECT_ID}.rule=Host(`${PROJECT_ID}.${BASE_DOMAIN}`)"
+      - "traefik.http.routers.${PROJECT_ID}.entrypoints=websecure"
+      - "traefik.http.routers.${PROJECT_ID}.tls=true"
+      # 컨테이너 안에서 앱이 듣고 있는 포트입니다. project.json 의 port 와 같아야 합니다.
+      - "traefik.http.services.${PROJECT_ID}.loadbalancer.server.port=3000"
+
+    networks:
+      - web
+
+# Traefik 이 미리 만들어 둔 공용 네트워크입니다.
+networks:
+  web:
+    external: true

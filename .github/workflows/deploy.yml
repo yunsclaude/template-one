@@ -6,6 +6,10 @@
 #   DEPLOY_HOST     EC2 공인 IPv4 또는 접속 가능한 호스트 이름
 #   DEPLOY_USER     EC2 접속 계정 (Amazon Linux 는 보통 ec2-user)
 #   DEPLOY_SSH_KEY  EC2 의 authorized_keys 에 등록된 공개키와 짝을 이루는 개인키
+#
+# 아래 한 가지는 비밀값이 아니므로 Secrets 가 아니라 Variables 탭에 등록합니다.
+#   BASE_DOMAIN     모든 프로젝트가 공유하는 베이스 도메인 (예: ai.mycompany.co.kr)
+#                   접속 주소는 <project.json 의 id>.<BASE_DOMAIN> 이 됩니다.
 name: Deploy to EC2
 
 on:
@@ -29,8 +33,9 @@ env:
   REMOTE_ROOT: /srv/company-ai/projects
   # compose.yaml 에 정의된 서비스 이름입니다.
   APP_SERVICE: app
-  # EC2 안에서 확인하는 상태 점검 주소입니다.
-  HEALTH_URL: http://127.0.0.1:3000/api/health
+  # 운영에서는 로컬용 compose.yaml 위에 compose.prod.yaml 을 겹쳐서 씁니다.
+  # 겹치면 3000 번 게시가 취소되고 Traefik 라벨과 web 네트워크가 붙습니다.
+  COMPOSE_FILES: -f compose.yaml -f compose.prod.yaml
   # 모든 ssh / rsync 가 함께 쓰는 접속 옵션입니다.
   # BatchMode=yes         비밀번호를 물어보지 않고 바로 실패합니다 (워크플로가 멈추지 않게).
   # StrictHostKeyChecking=yes  아래에서 등록한 호스트 키와 다르면 접속하지 않습니다.
@@ -59,6 +64,61 @@ jobs:
       # 검사가 실패하면 아래 배포 단계는 실행되지 않습니다.
       - name: 프로젝트 검사
         run: npm run check
+
+      # 접속 주소는 project.json 의 id 와 BASE_DOMAIN 으로 정해집니다.
+      # 직원은 id 만 바꾸면 되고, compose 파일은 전 직원이 동일하게 유지됩니다.
+      - name: 접속 주소 결정 및 project.json 갱신
+        env:
+          BASE_DOMAIN: ${{ vars.BASE_DOMAIN }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${BASE_DOMAIN:-}" ]; then
+            echo "::error::BASE_DOMAIN 이 비어 있습니다. 저장소의 Settings > Secrets and variables > Actions > Variables 에 등록하세요."
+            exit 1
+          fi
+
+          # 예시 도메인이 그대로 남아 있으면 인증서가 없어 접속이 안 됩니다. 미리 멈춥니다.
+          case "$BASE_DOMAIN" in
+            *example.com|*example.org|*example.net|localhost)
+              echo "::error::BASE_DOMAIN 이 예시 도메인($BASE_DOMAIN)입니다. 실제 도메인으로 바꾸세요."
+              exit 1
+              ;;
+          esac
+
+          if [[ ! "$BASE_DOMAIN" =~ ^[a-z0-9]([a-z0-9-]*[a-z0-9])?(\.[a-z0-9]([a-z0-9-]*[a-z0-9])?)+$ ]]; then
+            echo "::error::BASE_DOMAIN 형식이 올바르지 않습니다: $BASE_DOMAIN"
+            exit 1
+          fi
+
+          # id 는 npm run check 의 validate:project 가 이미 검사했지만,
+          # 이 값이 그대로 Traefik 라우터 이름과 주소가 되므로 한 번 더 확인합니다.
+          PROJECT_ID="$(node -p "require('./project.json').id")"
+
+          if [[ ! "$PROJECT_ID" =~ ^[a-z0-9][a-z0-9-]*$ ]]; then
+            echo "::error::project.json 의 id 형식이 올바르지 않습니다: $PROJECT_ID"
+            exit 1
+          fi
+
+          APP_HOST="${PROJECT_ID}.${BASE_DOMAIN}"
+
+          # project.json 의 domain 을 실제 접속 주소로 맞춰 둡니다.
+          # 화면에 표시되는 주소와 실제 주소가 어긋나지 않게 하기 위한 것으로,
+          # 저장소에는 커밋하지 않고 이번 배포에 보내는 파일만 바꿉니다.
+          env APP_HOST="$APP_HOST" node -e "
+            const fs = require('node:fs');
+            const p = JSON.parse(fs.readFileSync('project.json', 'utf8'));
+            p.domain = process.env.APP_HOST;
+            fs.writeFileSync('project.json', JSON.stringify(p, null, 2) + '\n');
+          "
+
+          {
+            echo "PROJECT_ID=$PROJECT_ID"
+            echo "BASE_DOMAIN=$BASE_DOMAIN"
+            echo "APP_HOST=$APP_HOST"
+          } >> "$GITHUB_ENV"
+
+          echo "접속 주소: https://${APP_HOST}"
 
       # 저장소 이름이 그대로 서버 경로가 되므로, 이상한 문자가 섞여 있지 않은지 확인합니다.
       - name: 저장소 이름 확인 및 배포 경로 결정
@@ -180,10 +240,14 @@ jobs:
 
           # shellcheck disable=SC2086
           ssh -i "$HOME/.ssh/deploy_key" $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" \
-            "REMOTE_DIR='$REMOTE_DIR' APP_SERVICE='$APP_SERVICE' bash -s" <<'REMOTE'
+            "REMOTE_DIR='$REMOTE_DIR' APP_SERVICE='$APP_SERVICE' COMPOSE_FILES='$COMPOSE_FILES' \
+             PROJECT_ID='$PROJECT_ID' BASE_DOMAIN='$BASE_DOMAIN' bash -s" <<'REMOTE'
           set -euo pipefail
 
           cd "$REMOTE_DIR"
+
+          # compose.prod.yaml 의 라벨 안에서 치환되는 값들입니다.
+          export PROJECT_ID BASE_DOMAIN
 
           if ! command -v docker >/dev/null 2>&1; then
             echo "docker 명령을 찾을 수 없습니다. EC2 에 Docker 를 설치하세요." >&2
@@ -200,26 +264,43 @@ jobs:
             exit 1
           fi
 
-          if [ ! -f compose.yaml ]; then
-            echo "compose.yaml 이 없습니다." >&2
+          for f in compose.yaml compose.prod.yaml; do
+            if [ ! -f "$f" ]; then
+              echo "$f 이 없습니다." >&2
+              exit 1
+            fi
+          done
+
+          # Traefik 이 만들어 두는 공용 네트워크입니다.
+          # 없으면 컨테이너는 떠도 외부에서 접속할 수 없습니다.
+          if ! docker network inspect web >/dev/null 2>&1; then
+            echo "공용 네트워크 web 이 없습니다. 서버에서 Traefik 을 먼저 띄우세요:" >&2
+            echo "  cd /srv/company-ai/traefik && bash bootstrap.sh" >&2
             exit 1
           fi
 
           echo "--- compose 설정 문법 검사 ---"
-          docker compose config >/dev/null
+          # shellcheck disable=SC2086
+          docker compose $COMPOSE_FILES config >/dev/null
           echo "문법 이상 없음"
 
           echo "--- 빌드 및 실행 ---"
-          docker compose up -d --build --remove-orphans
+          # shellcheck disable=SC2086
+          docker compose $COMPOSE_FILES up -d --build --remove-orphans
 
           echo "--- 컨테이너 상태 ---"
-          docker compose ps
+          # shellcheck disable=SC2086
+          docker compose $COMPOSE_FILES ps
 
           echo "--- 최근 로그 100줄 ---"
-          docker compose logs --tail=100 "$APP_SERVICE"
+          # shellcheck disable=SC2086
+          docker compose $COMPOSE_FILES logs --tail=100 "$APP_SERVICE"
           REMOTE
 
-      # 컨테이너가 떴다고 해서 앱이 정상이라는 뜻은 아닙니다. 실제 응답을 확인합니다.
+      # 컨테이너가 떴다고 해서 앱이 정상이라는 뜻은 아닙니다. 실제 응답을 두 단계로 확인합니다.
+      #   1단계  컨테이너 안에서 앱이 응답하는가          -> 앱 자체 문제인지 가림
+      #   2단계  Traefik 을 거쳐 HTTPS 로 응답하는가      -> 라우팅·인증서까지 확인
+      # 2단계가 통과하면 DNS 를 뺀 나머지(라우팅·인증서·앱)가 전부 정상이라는 뜻입니다.
       - name: Health Check
         env:
           DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
@@ -229,12 +310,57 @@ jobs:
 
           # shellcheck disable=SC2086
           ssh -i "$HOME/.ssh/deploy_key" $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" \
-            "REMOTE_DIR='$REMOTE_DIR' APP_SERVICE='$APP_SERVICE' HEALTH_URL='$HEALTH_URL' bash -s" <<'REMOTE'
+            "REMOTE_DIR='$REMOTE_DIR' APP_SERVICE='$APP_SERVICE' COMPOSE_FILES='$COMPOSE_FILES' \
+             APP_HOST='$APP_HOST' bash -s" <<'REMOTE'
           set -euo pipefail
 
           cd "$REMOTE_DIR"
 
-          # 5초 간격으로 최대 12번 = 최대 60초 기다립니다.
+          dump_logs() {
+            echo "--- 최근 로그 200줄 ---" >&2
+            # shellcheck disable=SC2086
+            docker compose $COMPOSE_FILES logs --tail=200 "$APP_SERVICE" >&2 || true
+          }
+
+          # ---------------------------------------------------- 1단계: 컨테이너 안
+          echo "== 1단계: 컨테이너 안에서 앱 응답 확인 =="
+
+          max_attempts=12
+          attempt=0
+          ok=0
+
+          while [ "$attempt" -lt "$max_attempts" ]; do
+            attempt=$((attempt + 1))
+
+            # shellcheck disable=SC2086
+            if docker compose $COMPOSE_FILES exec -T "$APP_SERVICE" \
+                 node -e "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))" \
+                 >/dev/null 2>&1; then
+              echo "1단계 성공 (${attempt}번째 시도)"
+              ok=1
+              break
+            fi
+
+            echo "아직 준비되지 않았습니다 (${attempt}/${max_attempts})"
+            [ "$attempt" -lt "$max_attempts" ] && sleep 5
+          done
+
+          if [ "$ok" -ne 1 ]; then
+            echo "1단계 실패: 컨테이너 안에서도 앱이 응답하지 않습니다." >&2
+            dump_logs
+            exit 1
+          fi
+
+          # ------------------------------------------------ 2단계: Traefik 경유 HTTPS
+          echo
+          echo "== 2단계: Traefik 경유 HTTPS 확인 ($APP_HOST) =="
+
+          # --resolve 로 DNS 를 거치지 않고 이 서버의 443 으로 바로 붙습니다.
+          # DNS 전파가 아직 안 끝났어도 라우팅과 인증서를 확인할 수 있습니다.
+          #
+          # -k 를 쓰는 이유: 스테이징 인증서로 검증하는 동안에는 신뢰 체인이 없어
+          # 검증이 실패합니다. 대신 아래에서 실제 발급자를 출력하므로,
+          # 운영 전환 후에는 로그에서 Let's Encrypt 인지 눈으로 확인할 수 있습니다.
           max_attempts=12
           attempt=0
 
@@ -242,30 +368,39 @@ jobs:
             attempt=$((attempt + 1))
 
             body_file="$(mktemp)"
-            # -o 로 본문을 파일에 담고, -w 로 HTTP 상태 코드만 화면으로 받습니다.
-            # 접속 자체가 실패하면 000 으로 처리합니다.
-            status_code="$(curl -sS -o "$body_file" -w '%{http_code}' --max-time 5 "$HEALTH_URL" 2>/dev/null || echo '000')"
+            status_code="$(curl -sSk -o "$body_file" -w '%{http_code}' --max-time 5 \
+              --resolve "${APP_HOST}:443:127.0.0.1" \
+              "https://${APP_HOST}/api/health" 2>/dev/null || echo '000')"
 
             if [ "$status_code" = "200" ]; then
-              echo "Health Check 성공 (HTTP 200, ${attempt}번째 시도)"
+              echo "2단계 성공 (HTTP 200, ${attempt}번째 시도)"
               echo "응답 본문:"
               cat "$body_file"
               echo
               rm -f "$body_file"
+
+              echo "--- 인증서 발급자 ---"
+              echo | openssl s_client -connect 127.0.0.1:443 -servername "$APP_HOST" 2>/dev/null \
+                | openssl x509 -noout -issuer -dates 2>/dev/null \
+                || echo "(발급자 확인 실패 - openssl 없음)"
+
+              echo
+              echo "배포 완료: https://${APP_HOST}"
               exit 0
             fi
 
             echo "아직 준비되지 않았습니다 (${attempt}/${max_attempts}, HTTP ${status_code})"
             rm -f "$body_file"
 
-            if [ "$attempt" -lt "$max_attempts" ]; then
-              sleep 5
-            fi
+            [ "$attempt" -lt "$max_attempts" ] && sleep 5
           done
 
-          echo "Health Check 실패: 60초 안에 HTTP 200 을 받지 못했습니다." >&2
-          echo "--- 최근 로그 200줄 ---" >&2
-          docker compose logs --tail=200 "$APP_SERVICE" >&2 || true
+          echo "2단계 실패: Traefik 을 거친 HTTPS 응답을 받지 못했습니다." >&2
+          echo "앱 자체는 1단계에서 정상이었으므로 라우팅 또는 인증서 문제입니다." >&2
+          echo "확인할 것:" >&2
+          echo "  docker logs traefik --tail=100" >&2
+          echo "  docker inspect ${APP_SERVICE} 컨테이너의 traefik.* 라벨" >&2
+          dump_logs
           exit 1
           REMOTE
 

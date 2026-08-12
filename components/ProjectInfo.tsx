@@ -11,7 +11,7 @@ export function ProjectInfo({ project }: ProjectInfoProps) {
     { label: "제작자", value: project.owner },
     { label: "부서", value: project.department },
     { label: "프로젝트 ID", value: project.id },
-    { label: "도메인(예정)", value: project.domain },
+    { label: "도메인", value: project.domain },
   ];
 
   return (

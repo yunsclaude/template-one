@@ -49,6 +49,7 @@ AWS ECR, Kubernetes는 아직 도입하지 않았습니다. 다만 나중에 추
 
 - `Dockerfile`
 - `compose.yaml`
+- `compose.prod.yaml`
 - `.github/workflows/`
 - `.claude/settings.json`
 - `scripts/`
@@ -156,7 +157,17 @@ docker compose down                   # 종료 및 정리
 
 다음은 회사 인프라 담당이 나중에 붙일 예정입니다. 직원 프로젝트에서 직접 만들지 마세요.
 
-- EC2 자동 배포 워크플로
-- 와일드카드 도메인 연결 / Traefik 리버스 프록시 구성
-- GitHub Secret 설정
 - 전사 프로젝트 목록 페이지
+
+## 참고: 배포와 주소
+
+이미 붙어 있는 것이므로 직원 프로젝트에서 다시 만들지 마세요.
+
+- `main` 브랜치 Push → 검사 → EC2 배포까지 `.github/workflows/deploy.yml` 이 처리합니다.
+- 접속 주소는 `<project.json 의 id>.<BASE_DOMAIN>` 입니다. `BASE_DOMAIN` 은 저장소의
+  GitHub Variable 이고, 주소를 바꾸려면 `id` 만 바꿉니다.
+- HTTPS 인증서는 서버의 Traefik 이 와일드카드로 자동 발급·갱신합니다.
+  프로젝트 쪽에 인증서, 도메인, 포트 관련 설정을 추가하지 마세요.
+- 운영에서는 `compose.yaml` 위에 `compose.prod.yaml` 이 겹쳐집니다.
+  이때 호스트 포트 게시가 취소되고 Traefik 라벨과 `web` 네트워크가 붙습니다.
+  로컬 개발은 `compose.yaml` 만 쓰므로 `localhost:3000` 그대로입니다.
