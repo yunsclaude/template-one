@@ -195,6 +195,61 @@ code {
   font-size: 0.92rem;
 }
 
+/* 메뉴 뽑기 */
+.picker-result {
+  margin: 0.5rem 0 1rem;
+  padding: 1.5rem 1rem;
+  background: var(--ok-bg);
+  border-radius: var(--radius);
+  color: var(--ok);
+  font-size: 1.75rem;
+  font-weight: 700;
+  text-align: center;
+  overflow-wrap: anywhere;
+}
+
+.picker-button {
+  width: 100%;
+  padding: 0.85rem 1rem;
+  background: var(--accent);
+  border: none;
+  border-radius: var(--radius);
+  color: #ffffff;
+  font-family: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.picker-button:hover {
+  filter: brightness(1.08);
+}
+
+.picker-count {
+  margin: 0.75rem 0 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+/* 후보 메뉴 목록 */
+.menu-chips {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.menu-chip {
+  padding: 0.3rem 0.7rem;
+  background: var(--code-bg);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  font-size: 0.9rem;
+}
+
 /* 푸터 */
 .footer {
   color: var(--text-muted);

@@ -1,32 +1,39 @@
 import { AppHeader } from "@/components/AppHeader";
+import { DeployInfo } from "@/components/DeployInfo";
+import { LunchPicker } from "@/components/LunchPicker";
 import { ProjectInfo } from "@/components/ProjectInfo";
 import { env } from "@/lib/env";
 import { project } from "@/lib/project";
 
-const startingPoints: { file: string; description: string }[] = [
-  {
-    file: "project.json",
-    description: "프로젝트 이름, 설명, 제작자, 부서를 내 정보로 바꿉니다. 가장 먼저 수정하세요.",
-  },
-  {
-    file: "app/page.tsx",
-    description: "지금 보고 있는 이 화면입니다. 첫 화면을 만들려면 여기부터 고칩니다.",
-  },
-  {
-    file: "components/",
-    description: "화면을 이루는 조각(헤더, 카드, 버튼 등)을 두는 곳입니다.",
-  },
-  {
-    file: "app/api/",
-    description: "서버 기능(API)을 추가하는 곳입니다. health 폴더는 지우지 마세요.",
-  },
-  {
-    file: "app/globals.css",
-    description: "전체 화면의 색과 여백 같은 디자인을 바꿉니다.",
-  },
+// 새로고침할 때마다 서버가 화면을 다시 만들게 합니다.
+// 이렇게 해야 아래 "서버 시각" 이 매번 갱신되어 배포 상태를 눈으로 확인할 수 있습니다.
+export const dynamic = "force-dynamic";
+
+const menus: string[] = [
+  "김치찌개",
+  "된장찌개",
+  "제육볶음",
+  "돈가스",
+  "비빔밥",
+  "칼국수",
+  "냉면",
+  "짜장면",
+  "짬뽕",
+  "초밥",
+  "라멘",
+  "쌀국수",
+  "샐러드",
+  "햄버거",
+  "카레",
 ];
 
 export default function Home() {
+  const serverTime = new Intl.DateTimeFormat("ko-KR", {
+    dateStyle: "long",
+    timeStyle: "medium",
+    timeZone: "Asia/Seoul",
+  }).format(new Date());
+
   return (
     <main className="page">
       <AppHeader
@@ -35,25 +42,25 @@ export default function Home() {
         status={`실행 중 · ${env.nodeEnv}`}
       />
 
-      <p className="notice">템플릿이 정상적으로 실행 중입니다.</p>
-
-      <ProjectInfo project={project} />
+      <LunchPicker menus={menus} />
 
       <section className="card">
-        <h2 className="card-title">어떤 파일부터 수정하면 되나요?</h2>
+        <h2 className="card-title">후보 메뉴 {menus.length}개</h2>
         <p className="card-hint">
-          아래 순서대로 고치면 됩니다. 잘 모르겠으면 Claude Code에게 파일 이름과 함께
-          원하는 것을 설명해 주세요.
+          메뉴를 바꾸려면 <code>app/page.tsx</code> 의 <code>menus</code> 목록을 고치세요.
         </p>
-        <ol className="guide-list">
-          {startingPoints.map((item) => (
-            <li className="guide-item" key={item.file}>
-              <code className="guide-file">{item.file}</code>
-              <span className="guide-description">{item.description}</span>
+        <ul className="menu-chips">
+          {menus.map((menu) => (
+            <li className="menu-chip" key={menu}>
+              {menu}
             </li>
           ))}
-        </ol>
+        </ul>
       </section>
+
+      <DeployInfo serverTime={serverTime} nodeEnv={env.nodeEnv} />
+
+      <ProjectInfo project={project} />
 
       <footer className="footer">
         <p>
