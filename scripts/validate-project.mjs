@@ -117,7 +117,17 @@ requireNonEmptyString(project, "name", "프로젝트 이름");
 requireNonEmptyString(project, "description", "프로젝트 설명");
 requireNonEmptyString(project, "owner", "제작자");
 requireNonEmptyString(project, "department", "부서");
-requireNonEmptyString(project, "domain", "도메인");
+
+// domain 은 비워 둬도 됩니다.
+// 배포할 때 <id>.<BASE_DOMAIN> 으로 자동으로 채워지기 때문입니다.
+// 직접 적어 두더라도 배포 시 실제 주소로 덮어써집니다.
+// 다만 값이 있다면 문자열이어야 합니다.
+if (Object.hasOwn(project, "domain") && typeof project.domain !== "string") {
+  fail(
+    `도메인(domain) 은 문자열이어야 합니다. 현재 타입: ${typeof project.domain} ` +
+      '(값을 모르면 "" 로 비워 두세요. 배포할 때 자동으로 채워집니다)',
+  );
+}
 
 // 3-1. 템플릿 예시 값이 그대로 남아 있는지
 if (project.id === TEMPLATE_DEFAULTS.id) {
@@ -170,4 +180,7 @@ console.log(`  - 프로젝트 ID : ${project.id}`);
 console.log(`  - 이름        : ${project.name}`);
 console.log(`  - 제작자      : ${project.owner} (${project.department})`);
 console.log(`  - 포트        : ${project.port}`);
+console.log(
+  `  - 도메인      : ${project.domain ? project.domain : "(배포할 때 자동으로 정해집니다)"}`,
+);
 console.log(`  - 데이터베이스: ${project.database ? "사용함" : "사용 안 함"}`);
