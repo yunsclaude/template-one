@@ -19,7 +19,14 @@ services:
     environment:
       NODE_ENV: production
       PORT: "3000"
+      # 로컬 개발용 DB 접속 주소입니다.
+      # 아래 db 서비스를 가리킵니다. 진짜 비밀번호가 아니라 내 PC 안에서만 쓰는 값입니다.
+      # 운영에서는 compose.prod.yaml 이 이 값을 서버가 만든 것으로 덮어씁니다.
+      DATABASE_URL: "postgresql://app:localdev@db:5432/app"
     restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
     healthcheck:
       # 배포 서버와 같은 방식으로 /api/health 를 호출해 정상 여부를 확인합니다.
       test:
@@ -33,3 +40,38 @@ services:
       timeout: 5s
       retries: 3
       start_period: 15s
+
+  # 내 PC 에서만 쓰는 데이터베이스입니다.
+  #
+  # 운영 서버에서는 이 서비스를 쓰지 않습니다.
+  # 거기서는 모든 프로젝트가 공용 PostgreSQL 하나를 나눠 쓰고,
+  # compose.prod.yaml 이 이 서비스를 꺼 버립니다.
+  #
+  # 여기 적힌 비밀번호(localdev)는 내 PC 안에서만 통하는 값이라 그대로 둬도 됩니다.
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: app
+      POSTGRES_PASSWORD: localdev
+      POSTGRES_DB: app
+      TZ: Asia/Seoul
+    # 호스트 포트를 열지 않습니다.
+    # DB 도구로 직접 들여다보려면 아래 줄의 주석을 푸세요.
+    # ports:
+    #   - "5432:5432"
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      # 앱은 이 검사가 통과한 뒤에 시작합니다. (depends_on)
+      test: ["CMD-SHELL", "pg_isready -U app -d app"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+# 내 PC 의 DB 데이터가 저장되는 곳입니다.
+# docker compose down 으로는 지워지지 않습니다.
+# 완전히 초기화하려면: docker compose down -v
+volumes:
+  dbdata:

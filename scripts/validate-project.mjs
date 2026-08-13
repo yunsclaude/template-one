@@ -20,6 +20,7 @@ const REQUIRED_FIELDS = [
   "department",
   "domain",
   "port",
+  "database",
 ];
 
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
@@ -137,6 +138,16 @@ if (project.port !== FIXED_PORT) {
   );
 }
 
+// 5. database 는 true / false 만 허용합니다.
+//    true 면 배포할 때 서버가 이 프로젝트 전용 데이터베이스를 만들어 줍니다.
+if (Object.hasOwn(project, "database") && typeof project.database !== "boolean") {
+  fail(
+    "database 는 true 또는 false 여야 합니다. 따옴표 없이 씁니다. " +
+      `현재 값: ${JSON.stringify(project.database)} ` +
+      '(올바른 예: "database": true)',
+  );
+}
+
 if (errors.length > 0) {
   console.error("[실패] project.json 검사에서 문제가 발견되었습니다.\n");
   for (const [index, message] of errors.entries()) {
@@ -159,3 +170,4 @@ console.log(`  - 프로젝트 ID : ${project.id}`);
 console.log(`  - 이름        : ${project.name}`);
 console.log(`  - 제작자      : ${project.owner} (${project.department})`);
 console.log(`  - 포트        : ${project.port}`);
+console.log(`  - 데이터베이스: ${project.database ? "사용함" : "사용 안 함"}`);

@@ -25,9 +25,16 @@ services:
     # 그래서 여러 프로젝트가 모두 컨테이너 3000 번을 써도 서로 충돌하지 않습니다.
     ports: !reset []
 
+    # 로컬용 db 서비스에 의존하지 않습니다. 운영에서는 공용 PostgreSQL 을 씁니다.
+    depends_on: !reset {}
+
     environment:
       NODE_ENV: production
       PORT: "3000"
+      # 공용 PostgreSQL 접속 주소입니다.
+      # 서버의 provision.sh 가 프로젝트별로 만들어 주고 GitHub Actions 가 넘겨줍니다.
+      # project.json 의 database 가 false 면 빈 값이 들어오고, 그때는 DB 를 쓰지 않습니다.
+      DATABASE_URL: "${DATABASE_URL:-}"
 
     # Traefik 은 exposedbydefault=false 이므로, 아래 라벨이 붙은 컨테이너만 외부에 노출됩니다.
     labels:
@@ -40,9 +47,24 @@ services:
       - "traefik.http.services.${PROJECT_ID}.loadbalancer.server.port=3000"
 
     networks:
+      # 인터넷에서 Traefik 을 거쳐 들어오는 길입니다.
       - web
+      # 공용 PostgreSQL 로 나가는 길입니다. 인터넷과는 이어져 있지 않습니다.
+      - db
 
-# Traefik 이 미리 만들어 둔 공용 네트워크입니다.
+  # 로컬 개발용 db 서비스를 운영에서는 띄우지 않습니다.
+  #
+  # compose 에는 "서비스 삭제" 기능이 없어서, 프로필을 붙여 제외합니다.
+  # 운영에서는 이 프로필을 켜지 않으므로 이 서비스는 만들어지지 않습니다.
+  db:
+    profiles:
+      - local-only
+
+# 서버에 미리 만들어져 있는 공용 네트워크입니다.
+#   web  - Traefik 이 bootstrap.sh 로 만듭니다
+#   db   - PostgreSQL 이 bootstrap.sh 로 만듭니다
 networks:
   web:
+    external: true
+  db:
     external: true

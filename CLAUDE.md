@@ -26,9 +26,11 @@
 - **ESLint**
 - **Docker** / **Docker Compose**
 
-이번 단계에서는 **데이터베이스를 사용하지 않습니다.** PostgreSQL, Drizzle, Prisma, 사용자 로그인,
-AWS ECR, Kubernetes는 아직 도입하지 않았습니다. 다만 나중에 추가할 수 있는 구조이므로,
-이런 것을 넣을 수 없게 막는 방향으로 바꾸지도 마세요.
+- **PostgreSQL** (필요한 프로젝트만) + **pg** 드라이버
+
+ORM(Drizzle, Prisma)은 아직 쓰지 않습니다. `lib/db.ts` 의 `query()` 로 SQL을 직접 씁니다.
+사용자 로그인, AWS ECR, Kubernetes도 아직 도입하지 않았습니다. 다만 나중에 추가할 수 있는
+구조이므로, 이런 것을 넣을 수 없게 막는 방향으로 바꾸지도 마세요.
 
 ## 직원이 주로 수정할 위치
 
@@ -61,6 +63,8 @@ AWS ECR, Kubernetes는 아직 도입하지 않았습니다. 다만 나중에 추
 - `app/api/health/route.ts` 삭제 또는 응답 형식 변경 (배포 서버가 이 주소로 상태를 확인합니다)
 - `project.json`의 필수 필드 삭제
 - `project.json`의 `port` 값 변경 (3000 고정)
+- `lib/db.ts`에 접속 정보(주소, 비밀번호) 직접 작성 — 항상 `DATABASE_URL` 환경변수로 읽습니다
+- `compose.yaml`의 `db` 서비스에 실제 운영 비밀번호 기입 — 그 파일은 내 PC 전용입니다
 
 ## 개발 규칙
 
@@ -76,6 +80,20 @@ AWS ECR, Kubernetes는 아직 도입하지 않았습니다. 다만 나중에 추
 - 사용자 입력값은 **반드시 검증**합니다. 폼 입력, URL 파라미터, API 요청 본문 모두 해당합니다.
 - 화면에 표시하는 프로젝트 정보는 코드에 직접 적지 말고 `project.json`에서 읽습니다
   (`lib/project.ts` 사용).
+
+### 데이터베이스
+
+- 데이터베이스가 필요하면 `project.json`의 `"database"`를 `true`로 바꿉니다. 그것만 하면 됩니다.
+  배포할 때 서버가 이 프로젝트 전용 DB와 계정을 자동으로 만들고 `DATABASE_URL`을 넣어 줍니다.
+- 접속 정보를 직접 만들거나 어딘가에 등록하지 마세요. 비밀번호는 서버 밖으로 나오지 않습니다.
+- SQL은 `lib/db.ts`의 `query()`, `transaction()`으로 실행합니다. `pg`를 직접 import하지 마세요.
+- **값을 문자열로 이어 붙이지 말고 반드시 `$1`, `$2` 자리표시자를 씁니다.** 이어 붙이면 SQL 주입에
+  뚫립니다.
+  - 나쁨: `` query(`SELECT * FROM memo WHERE id = ${id}`) ``
+  - 좋음: `query("SELECT * FROM memo WHERE id = $1", [id])`
+- 로컬에서는 `docker compose up`이 DB까지 함께 띄웁니다. 별도 설치가 필요 없습니다.
+- 테이블은 직접 `CREATE TABLE`로 만듭니다. 마이그레이션 도구는 아직 없습니다.
+- 각 프로젝트는 자기 DB에만 접속할 수 있습니다. 다른 프로젝트 데이터는 보이지 않습니다.
 
 ### 보안
 
