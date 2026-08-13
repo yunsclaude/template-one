@@ -4,7 +4,11 @@
 #   docker compose up -d --build              -> http://localhost:3000
 #
 # 운영에서는 GitHub Actions 가 아래처럼 두 파일을 겹쳐서 실행합니다:
-#   docker compose -f compose.yaml -f compose.prod.yaml up -d --build
+#   docker compose -f compose.yaml -f compose.prod.yaml up -d --no-build
+#
+# 운영에서는 EC2 가 직접 빌드하지 않습니다.
+# GitHub Actions 가 이미지를 만들어 보내주고, EC2 는 받아서 실행만 합니다.
+# 그래서 아래 image 값이 반드시 필요합니다. (GitHub Actions 가 APP_IMAGE 로 넘겨줍니다.)
 #
 # 이 파일은 배포 자동화가 의존하므로 직접 수정하지 마세요.
 # 프로젝트 주소는 project.json 의 id 로 정해집니다. id 를 바꾸면 주소가 따라 바뀝니다.
@@ -12,6 +16,10 @@
 
 services:
   app:
+    # GitHub Actions 가 만들어 보낸 이미지를 그대로 씁니다. EC2 에서 빌드하지 않습니다.
+    # 값이 비어 있으면 실행을 멈춥니다. 잘못된 이미지가 조용히 뜨는 것보다 낫습니다.
+    image: "${APP_IMAGE:?APP_IMAGE 가 없습니다. 이 파일은 GitHub Actions 배포에서만 씁니다}"
+
     # 로컬용 3000 번 게시를 취소합니다.
     # 외부에 노출되는 것은 Traefik 의 80/443 뿐이고, 앱은 web 네트워크 안에서만 접근됩니다.
     # 그래서 여러 프로젝트가 모두 컨테이너 3000 번을 써도 서로 충돌하지 않습니다.

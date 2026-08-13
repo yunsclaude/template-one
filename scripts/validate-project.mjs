@@ -25,10 +25,24 @@ const REQUIRED_FIELDS = [
 const ID_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 const FIXED_PORT = 3000;
 
+// 템플릿에 원래 들어 있는 예시 값입니다.
+// 이 값을 그대로 두고 배포하면 다른 사람의 프로젝트와 주소가 겹칩니다.
+// 여기서는 경고만 하고, 실제 차단은 배포 단계(.github/workflows/deploy.yml)에서 합니다.
+// 템플릿 저장소 자신은 이 값으로 동작해야 하므로 실패로 처리하지 않습니다.
+const TEMPLATE_DEFAULTS = {
+  id: "lunch-roulette",
+  owner: "yun",
+};
+
 const errors = [];
+const warnings = [];
 
 function fail(message) {
   errors.push(message);
+}
+
+function warn(message) {
+  warnings.push(message);
 }
 
 /** 값이 있는 문자열인지 검사합니다. 항목 자체가 없으면 위에서 이미 알렸으므로 건너뜁니다. */
@@ -104,6 +118,17 @@ requireNonEmptyString(project, "owner", "제작자");
 requireNonEmptyString(project, "department", "부서");
 requireNonEmptyString(project, "domain", "도메인");
 
+// 3-1. 템플릿 예시 값이 그대로 남아 있는지
+if (project.id === TEMPLATE_DEFAULTS.id) {
+  warn(
+    `id 가 템플릿 예시 값 "${TEMPLATE_DEFAULTS.id}" 그대로입니다. ` +
+      "접속 주소가 id 로 정해지므로, 바꾸지 않으면 다른 사람의 프로젝트와 겹쳐 배포가 거부됩니다.",
+  );
+}
+if (project.owner === TEMPLATE_DEFAULTS.owner) {
+  warn(`owner 가 템플릿 예시 값 "${TEMPLATE_DEFAULTS.owner}" 그대로입니다. 본인 이름으로 바꿔 주세요.`);
+}
+
 // 4. port 는 3000 고정
 if (project.port !== FIXED_PORT) {
   fail(
@@ -119,6 +144,14 @@ if (errors.length > 0) {
   }
   console.error("\n project.json 을 수정한 뒤 다시 실행해 주세요: npm run validate:project");
   process.exit(1);
+}
+
+if (warnings.length > 0) {
+  console.warn("[주의] 고치지 않아도 검사는 통과하지만, 배포 전에 확인이 필요합니다.\n");
+  for (const [index, message] of warnings.entries()) {
+    console.warn(`  ${index + 1}. ${message}`);
+  }
+  console.warn("");
 }
 
 console.log("[성공] project.json 검사를 통과했습니다.");
