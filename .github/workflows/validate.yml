@@ -41,6 +41,11 @@ jobs:
       - name: 프로젝트 정보 검사
         run: npm run validate:project
 
+      # 소스에 API 키가 직접 적혀 있으면 여기서 멈춥니다.
+      # 로컬 커밋 훅은 --no-verify 로 건너뛸 수 있지만 이 검사는 건너뛸 수 없습니다.
+      - name: 비밀값 검사
+        run: npm run check:secrets
+
       - name: ESLint 검사
         run: npm run lint
 

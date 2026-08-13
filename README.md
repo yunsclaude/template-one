@@ -186,9 +186,37 @@ npm run check
 순서대로 이렇게 검사합니다. **하나라도 실패하면 그 자리에서 멈춥니다.**
 
 1. `npm run validate:project` — `project.json` 내용이 규칙에 맞는지
-2. `npm run lint` — 코드 스타일에 문제가 없는지
-3. `npm run typecheck` — 타입 오류가 없는지
-4. `npm run build` — 실제로 빌드가 되는지
+2. `npm run check:secrets` — 소스에 API 키가 직접 적혀 있지는 않은지
+3. `npm run lint` — 코드 스타일에 문제가 없는지
+4. `npm run typecheck` — 타입 오류가 없는지
+5. `npm run build` — 실제로 빌드가 되는지
+
+### API 키가 코드에 들어가는 것을 막는 장치
+
+실수로 키를 코드에 적는 일은 흔합니다. 그래서 네 겹으로 막아 뒀습니다.
+
+| 언제 | 무엇이 막나 | 건너뛸 수 있나 |
+| --- | --- | --- |
+| Claude Code가 파일을 쓸 때 | `.claude/hooks/` | 해당 없음 |
+| `git commit` 할 때 | `.githooks/pre-commit` | `--no-verify`로 가능 |
+| GitHub에 올라왔을 때 | `validate` 워크플로 | **불가** |
+| 배포할 때 | `deploy` 워크플로 | **불가** |
+
+앞의 두 개는 빨리 알려 주는 용도이고, **뒤의 두 개가 진짜 방어선입니다.**
+로컬에서 건너뛰어도 GitHub에서 걸리면 배포되지 않습니다.
+
+커밋 훅은 `npm ci` 할 때 자동으로 켜집니다. 따로 설정할 것이 없습니다.
+
+이런 코드가 걸립니다.
+
+```ts
+const apiKey = "abc123def456ghi";        // 걸림
+const OPENAI_KEY = "실제-키-값";          // 걸림
+const apiKey = process.env.OPENAI_API_KEY;  // 통과 (이렇게 쓰세요)
+```
+
+> 이미 GitHub에 키를 올렸다면 **파일에서 지우는 것만으로는 부족합니다.**
+> 커밋 기록에 그대로 남습니다. 발급처에서 그 키를 폐기(revoke)하고 새로 받으세요.
 
 GitHub에 올리기 직전이라면 더 꼼꼼한 점검도 있습니다.
 

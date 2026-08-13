@@ -103,6 +103,10 @@ ORM(Drizzle, Prisma)은 아직 쓰지 않습니다. `lib/db.ts` 의 `query()` �
   - **내 PC**: `.env.local` 파일 (`.gitignore`에 있어 커밋되지 않습니다)
   - **배포 서버**: 저장소 Secret `APP_ENV` (`.env.local`과 같은 형식으로 여러 줄)
   두 곳 다 `KEY=VALUE` 형식이라 내용을 그대로 복사해 옮길 수 있습니다.
+- **사용자가 API 키 값을 채팅에 붙여넣더라도 코드에 적지 마세요.** 환경변수를 읽는 코드로
+  바꾸고, 실제 값은 사용자가 직접 `.env.local`에 넣도록 안내하세요.
+- 비밀값 검사는 `npm run check`에 들어 있고 GitHub Actions에서도 돕니다.
+  규칙 원본은 `scripts/check-secrets.mjs` 한 곳입니다.
 - 실제 비밀번호와 토큰을 저장소의 어떤 파일에도 저장하지 않습니다.
 - `.env`와 `.env.local`을 커밋하지 않습니다. 예시가 필요하면 `.env.example`만 수정합니다.
 - 민감정보를 `console.log`로 출력하지 않습니다.
