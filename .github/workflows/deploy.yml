@@ -330,6 +330,66 @@ jobs:
           rm -f /tmp/app-image.tar.gz
           echo "이미지 전송 완료"
 
+      # API 키 같은 비밀값을 서버로 보냅니다.
+      #
+      # 저장소 Secret 에 APP_ENV 라는 이름으로, .env.local 과 같은 형식으로 적습니다.
+      #   OPENAI_API_KEY=sk-...
+      #   SLACK_BOT_TOKEN=xoxb-...
+      #
+      # Secret 을 여러 개 만들지 않고 하나에 모으는 이유:
+      #   GitHub Actions 는 등록된 Secret 목록을 훑을 수 없습니다.
+      #   워크플로에 이름을 미리 적어야 하는데, 그러면 키를 추가할 때마다
+      #   이 파일을 고쳐야 합니다. 하나로 모으면 템플릿을 안 건드려도 됩니다.
+      #
+      # APP_ENV 를 등록하지 않았다면 이 단계는 아무것도 하지 않습니다.
+      # 서버에 직접 만들어 둔 .env.local 이 있다면 그대로 보존됩니다.
+      - name: 앱 비밀값 전달
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ secrets.DEPLOY_USER }}
+          APP_ENV: ${{ secrets.APP_ENV }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${APP_ENV:-}" ]; then
+            echo "APP_ENV Secret 이 없습니다. 비밀값 전달을 건너뜁니다."
+            echo "(API 키가 필요하면 저장소 Settings > Secrets and variables > Actions 에서"
+            echo " APP_ENV 라는 이름으로 등록하세요.)"
+            exit 0
+          fi
+
+          # 형식을 미리 확인합니다. 잘못된 줄이 있으면 컨테이너가 뜨지 않습니다.
+          # 값은 절대 출력하지 않고 줄 번호만 알립니다.
+          LINE_NO=0
+          BAD=0
+          while IFS= read -r line; do
+            LINE_NO=$((LINE_NO + 1))
+            # 빈 줄과 주석은 넘어갑니다.
+            case "$line" in
+              ''|'#'*) continue ;;
+            esac
+            if ! printf '%s' "$line" | grep -Eq '^[A-Za-z_][A-Za-z0-9_]*='; then
+              echo "::error::APP_ENV 의 ${LINE_NO}번째 줄이 KEY=VALUE 형식이 아닙니다."
+              BAD=1
+            fi
+          done <<< "$APP_ENV"
+
+          if [ "$BAD" -ne 0 ]; then
+            echo "APP_ENV 는 .env.local 과 같은 형식이어야 합니다:" >&2
+            echo "  OPENAI_API_KEY=sk-..." >&2
+            echo "따옴표나 export, JSON 은 쓰지 마세요." >&2
+            exit 1
+          fi
+
+          # 표준입력으로 넘깁니다. 명령행에 값이 남지 않습니다.
+          # umask 077 이라 파일은 600 으로 만들어집니다.
+          # shellcheck disable=SC2086
+          printf '%s\n' "$APP_ENV" | ssh -i "$HOME/.ssh/deploy_key" $SSH_OPTS \
+            "$DEPLOY_USER@$DEPLOY_HOST" \
+            "umask 077 && cat > '$REMOTE_DIR/.env.local' && chmod 600 '$REMOTE_DIR/.env.local'"
+
+          echo "비밀값 $(printf '%s\n' "$APP_ENV" | grep -Ec '^[A-Za-z_][A-Za-z0-9_]*=')개를 서버로 보냈습니다."
+
       # project.json 의 database 가 true 일 때만 실행합니다.
       #
       # 서버의 provision.sh 가 이 프로젝트 전용 데이터베이스와 계정을 만들고
