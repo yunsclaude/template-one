@@ -128,6 +128,53 @@ jobs:
 
           echo "접속 주소: https://${APP_HOST}"
 
+      # 이 주소가 정말 우리 서버로 오는지 실제로 조회해서 확인합니다.
+      #
+      # 왜 필요한가:
+      #   보통은 와일드카드(*.도메인)가 모든 이름을 이 서버로 보냅니다.
+      #   그런데 개별 A/CNAME 레코드가 있는 이름은 와일드카드보다 우선합니다.
+      #   그런 이름을 id 로 쓰면 사용자는 엉뚱한 서버로 가는데,
+      #   아래 Health Check 는 --resolve 로 주소를 강제로 이 서버에 꽂아 확인하므로
+      #   배포는 "성공" 으로 끝나버립니다. 그 조용한 실패를 여기서 막습니다.
+      #
+      # 빌드 앞에 두어, 잘못된 id 면 무거운 빌드를 시작하기 전에 멈추게 합니다.
+      - name: 접속 주소가 이 서버를 가리키는지 확인
+        env:
+          DEPLOY_HOST: ${{ secrets.DEPLOY_HOST }}
+        run: |
+          set -euo pipefail
+
+          # getent 는 어느 러너에나 있습니다. dig 은 없을 수 있습니다.
+          resolve() { getent ahostsv4 "$1" 2>/dev/null | awk '{print $1}' | sort -u; }
+
+          APP_IPS="$(resolve "$APP_HOST" || true)"
+          SERVER_IPS="$(resolve "$DEPLOY_HOST" || true)"
+
+          if [ -z "$APP_IPS" ]; then
+            echo "::error::$APP_HOST 이(가) DNS 에서 조회되지 않습니다."
+            echo "베이스 도메인에 와일드카드(*.$BASE_DOMAIN) 레코드가 있는지 확인하세요." >&2
+            exit 1
+          fi
+
+          if [ -z "$SERVER_IPS" ]; then
+            echo "::error::DEPLOY_HOST 를 조회할 수 없습니다. Secret 값을 확인하세요."
+            exit 1
+          fi
+
+          # 두 목록에 겹치는 주소가 하나라도 있으면 통과입니다.
+          if comm -12 <(echo "$APP_IPS") <(echo "$SERVER_IPS") | grep -q .; then
+            echo "확인됨: $APP_HOST 는 배포 서버를 가리킵니다."
+          else
+            echo "::error::$APP_HOST 이(가) 이 배포 서버가 아닌 다른 곳을 가리킵니다."
+            echo "" >&2
+            echo "  가리키는 곳: $(echo "$APP_IPS" | tr '\n' ' ')" >&2
+            echo "" >&2
+            echo "이 이름에는 이미 개별 DNS 레코드가 있어 와일드카드보다 우선합니다." >&2
+            echo "project.json 의 id 를 다른 값으로 바꾸고 다시 Push 하세요." >&2
+            echo "(이대로 배포하면 Actions 는 성공이라고 나오지만 실제 접속은 다른 서버로 갑니다.)" >&2
+            exit 1
+          fi
+
       # 이미지는 여기(GitHub)에서 만듭니다. EC2 에서 만들지 않습니다.
       #
       # 왜: EC2 는 vCPU 1개 / 메모리 2GB 라서 Next.js 빌드를 견디지 못합니다.
